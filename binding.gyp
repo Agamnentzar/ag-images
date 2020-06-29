@@ -9,7 +9,8 @@
                 "-Wall",
                 "-Wno-unused-parameter",
                 "-Wno-missing-field-initializers",
-                "-Wextra"
+                "-Wextra",
+                "-O3"
             ],
             "include_dirs": [
                 "<!(node -e \"require('nan')\")",

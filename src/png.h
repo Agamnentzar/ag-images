@@ -214,6 +214,7 @@ static error_status read_png(PngReadClosure *closure) {
   int bitDepth = 0;
   int colorType = -1;
   int interlaceMethod = 0;
+  int number_of_passes = 1;
   png_uint_32 retval = png_get_IHDR(
     png_ptr, info_ptr, &width, &height, &bitDepth, &colorType, &interlaceMethod, NULL, NULL);
   if (retval != 1) {
@@ -226,21 +227,23 @@ static error_status read_png(PngReadClosure *closure) {
 
   if (colorType == PNG_COLOR_TYPE_PALETTE) png_set_palette_to_rgb(png_ptr);
   if (colorType == PNG_COLOR_TYPE_GRAY || colorType == PNG_COLOR_TYPE_GRAY_ALPHA) png_set_gray_to_rgb(png_ptr);
+  if (colorType != PNG_COLOR_TYPE_RGB_ALPHA) png_set_filler(png_ptr, 0, PNG_FILLER_AFTER);
   if (png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS)) png_set_tRNS_to_alpha(png_ptr);
   if (bitDepth == 16) png_set_strip_16(png_ptr);
   if (bitDepth < 8) png_set_packing(png_ptr);
-  if (colorType != PNG_COLOR_TYPE_RGB_ALPHA) png_set_filler(png_ptr, 0, PNG_FILLER_AFTER);
+  if (interlaceMethod == PNG_INTERLACE_ADAM7) number_of_passes = png_set_interlace_handling(png_ptr);
 
-  // if (interlace_type == PNG_INTERLACE_ADAM7) {
-  //   number_of_passes = png_set_interlace_handling(png_ptr);
-  // }
-
-  uint8_t *rowData = buffer;
-
+  png_bytep *rowPointers = new png_bytep[height];
+  png_bytep rowData = (png_bytep)buffer;
+  
   for (png_uint_32 row = 0; row < height; row++) {
-    png_read_row(png_ptr, (png_bytep)rowData, NULL);
+    rowPointers[row] = rowData;
     rowData += width * 4;
   }
+
+  png_read_image(png_ptr, rowPointers);
+
+  delete[] rowPointers;
 
   png_destroy_read_struct(&png_ptr, NULL, NULL);
   closure->width = width;
