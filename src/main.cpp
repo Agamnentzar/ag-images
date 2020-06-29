@@ -7,7 +7,7 @@
 using namespace v8;
 using namespace std;
 
-static void parsePNGArgs(Local<Value> arg, PngWriteClosure *pngargs) {
+static char *parsePNGArgs(Local<Value> arg, PngWriteClosure *pngargs) {
   if (arg->IsObject()) {
     Local<Object> obj = Nan::To<Object>(arg).ToLocalChecked();
 
@@ -32,7 +32,7 @@ static void parsePNGArgs(Local<Value> arg, PngWriteClosure *pngargs) {
       Local<Uint8ClampedArray> palette_ta = palette.As<Uint8ClampedArray>();
       pngargs->nPaletteColors = palette_ta->Length();
       if (pngargs->nPaletteColors % 4 != 0) {
-        throw "Palette length must be a multiple of 4.";
+        return "Palette length must be a multiple of 4.";
       }
       pngargs->nPaletteColors /= 4;
       Nan::TypedArrayContents<uint8_t> _paletteColors(palette_ta);
@@ -44,6 +44,8 @@ static void parsePNGArgs(Local<Value> arg, PngWriteClosure *pngargs) {
       }
     }
   }
+  
+  return nullptr;
 }
 
 void to_png_buffer(uv_work_t *req) {
@@ -87,12 +89,14 @@ NAN_METHOD(encodePNG) {
   }
 
   closure->data = (uint8_t*)node::Buffer::Data(info[2]);
+  closure->dataRef.Reset(info[2]);
 
-  Nan::Persistent<v8::Value, v8::CopyablePersistentTraits<v8::Value>> dataRef(info[2]);
-  closure->dataRef = dataRef;
-  // closure->dataRef.Reset(...);
+  auto error = parsePNGArgs(info[3], closure);
 
-  parsePNGArgs(info[3], closure);
+  if (error) {
+    delete closure;
+    return Nan::ThrowTypeError(error);
+  }
 
   closure->cb.Reset(info[4].As<Function>());
 
