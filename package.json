@@ -1,0 +1,41 @@
+{
+  "name": "ag-images",
+  "description": "",
+  "version": "0.0.1",
+  "main": "index.js",
+  "browser": "browser.js",
+  "keywords": [],
+  "homepage": "https://github.com/Agamnentzar/ag-images",
+  "repository": "git://github.com/Agamnentzar/ag-images.git",
+  "scripts": {
+    "test": "mocha test/*.spec.js",
+    "build": "node-gyp rebuild -j 8",
+    "install": "node-pre-gyp install --fallback-to-build"
+  },
+  "binary": {
+    "module_name": "ag_images",
+    "module_path": "build/Release",
+    "host": "https://github.com/Agamnentzar/ag-images/releases/download/",
+    "remote_path": "v{version}",
+    "package_name": "{module_name}-v{version}-{node_abi}-{platform}-{libc}-{arch}.tar.gz"
+  },
+  "files": [
+    "binding.gyp",
+    "src/",
+    "index.d.ts"
+  ],
+  "types": "index.d.ts",
+  "dependencies": {
+    "@types/node": "^10.17.26",
+    "nan": "^2.14.0",
+    "node-pre-gyp": "^0.15.0"
+  },
+  "devDependencies": {
+    "assert-rejects": "^1.0.0",
+    "mocha": "^5.2.0"
+  },
+  "engines": {
+    "node": ">=6"
+  },
+  "license": "MIT"
+}
