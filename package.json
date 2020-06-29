@@ -1,7 +1,7 @@
 {
   "name": "ag-images",
   "description": "",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "main": "index.js",
   "browser": "browser.js",
   "keywords": [],
