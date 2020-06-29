@@ -1,6 +1,5 @@
 #include <nan.h>
 #include <v8.h>
-#include <vector>
 #include <assert.h>
 #include <cctype>
 #include "./png.h"
@@ -62,8 +61,7 @@ void to_png_buffer_after(uv_work_t *req) {
     Local<Value> argv[1] = { Exception::Error(Nan::New<String>(error_status_to_string(closure->status)).ToLocalChecked()) };
     closure->cb.Call(1, argv, &async);
   } else {
-    // TODO: perf ? no double copy ?
-    Local<Object> buf = Nan::CopyBuffer((char*)&closure->vec[0], closure->vec.size()).ToLocalChecked();
+    Local<Object> buf = Nan::NewBuffer((char*)closure->output, closure->outputLength).ToLocalChecked();
     Local<Value> argv[2] = { Nan::Null(), buf };
     closure->cb.Call(2, argv, &async);
   }
@@ -77,36 +75,30 @@ NAN_METHOD(encodePNG) {
     return Nan::ThrowTypeError("Invalid arguments");
   }
 
-  try {
-    auto closure = new PngWriteClosure();
-    closure->width = Nan::To<uint32_t>(info[0]).FromMaybe(0);
-    closure->height = Nan::To<uint32_t>(info[1]).FromMaybe(0);
-    Local<Context> ctx = Nan::GetCurrentContext();
-    auto length = node::Buffer::Length(info[2]);
+  auto closure = new PngWriteClosure();
+  closure->width = Nan::To<uint32_t>(info[0]).FromMaybe(0);
+  closure->height = Nan::To<uint32_t>(info[1]).FromMaybe(0);
+  Local<Context> ctx = Nan::GetCurrentContext();
+  auto length = node::Buffer::Length(info[2]);
 
-    if (length != (closure->width * closure->height * 4)) {
-      delete closure;
-      return Nan::ThrowTypeError("Invalid buffer size");
-    }
-
-    closure->data = (uint8_t*)node::Buffer::Data(info[2]);
-
-    Nan::Persistent<v8::Value, v8::CopyablePersistentTraits<v8::Value>> dataRef(info[2]);
-    closure->dataRef = dataRef;
-    // closure->dataRef.Reset(...);
-
-    parsePNGArgs(info[3], closure);
-
-    closure->cb.Reset(info[4].As<Function>());
-
-    uv_work_t* req = new uv_work_t;
-    req->data = closure;
-    uv_queue_work(uv_default_loop(), req, to_png_buffer, (uv_after_work_cb)to_png_buffer_after);
-  } catch (error_status status) {
-    return Nan::ThrowError(error_status_to_string(status));
-  } catch (const char* ex) {
-    return Nan::ThrowError(ex);
+  if (length != (closure->width * closure->height * 4)) {
+    delete closure;
+    return Nan::ThrowTypeError("Invalid buffer size");
   }
+
+  closure->data = (uint8_t*)node::Buffer::Data(info[2]);
+
+  Nan::Persistent<v8::Value, v8::CopyablePersistentTraits<v8::Value>> dataRef(info[2]);
+  closure->dataRef = dataRef;
+  // closure->dataRef.Reset(...);
+
+  parsePNGArgs(info[3], closure);
+
+  closure->cb.Reset(info[4].As<Function>());
+
+  uv_work_t* req = new uv_work_t;
+  req->data = closure;
+  uv_queue_work(uv_default_loop(), req, to_png_buffer, (uv_after_work_cb)to_png_buffer_after);
 }
 
 void decode_png_buffer(uv_work_t *req) {
@@ -124,8 +116,7 @@ void decode_png_buffer_after(uv_work_t *req) {
     Local<Value> argv[1] = { Exception::Error(Nan::New<String>(error_status_to_string(closure->status)).ToLocalChecked()) };
     closure->cb.Call(1, argv, &async);
   } else {
-    // TODO: fix memory leak
-    Local<Object> buf = Nan::CopyBuffer((char*)closure->buffer, closure->width * closure->height * 4).ToLocalChecked();
+    Local<Object> buf = Nan::NewBuffer((char*)closure->buffer, closure->width * closure->height * 4).ToLocalChecked();
     Local<Value> argv[4] = { Nan::Null(), buf, Nan::New<v8::Int32>(closure->width), Nan::New<v8::Int32>(closure->height) };
     closure->cb.Call(4, argv, &async);
   }

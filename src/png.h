@@ -7,7 +7,6 @@
 #include <pngconf.h>
 #include <nan.h>
 #include <stdint.h> // node < 7 uses libstdc++ on macOS which lacks complete c++11
-#include <vector>
 
 enum error_status {
     ES_SUCCESS = 0,
@@ -42,16 +41,19 @@ struct PngWriteClosure {
   uint32_t nPaletteColors = 0;
   uint8_t* palette = nullptr;
   uint8_t backgroundIndex = 0;
-  
-  std::vector<uint8_t> vec;
+
   Nan::Callback cb;
 
   uint32_t width;
   uint32_t height;
   uint8_t *data;
   Nan::Persistent<v8::Value, v8::CopyablePersistentTraits<v8::Value>> dataRef;
-
   error_status status = ES_SUCCESS;
+
+  // output
+  uint8_t *output = 0;
+  size_t outputLength = 0;
+  size_t outputCapacity = 0;
 };
 
 static void flush_func(png_structp) {
@@ -63,16 +65,26 @@ bool setjmp_wrapper(png_structp png) {
 }
 #endif
 
+#define INITIAL_SIZE 4096
+
 static void write_func(png_structp png, png_bytep data, png_size_t size) {
   PngWriteClosure *closure = (PngWriteClosure *) png_get_io_ptr(png);
 
-  try {
-    closure->vec.insert(closure->vec.end(), data, data + size);
-  } catch (const std::bad_alloc &) {
-    error_status *error = (error_status *) png_get_error_ptr(png);
-    if (*error == ES_SUCCESS) {
-      *error = ES_NO_MEMORY;
-    }
+  if (!closure->output) {
+    closure->output = (uint8_t*)malloc(INITIAL_SIZE);
+    closure->outputCapacity = INITIAL_SIZE;
+  }
+
+  while ((closure->outputCapacity - closure->outputLength) < size) {
+    closure->output = (uint8_t*)realloc(closure->output, closure->outputCapacity * 2);
+    closure->outputCapacity = closure->outputCapacity * 2;
+  }
+
+  if (closure->output) {
+    memcpy(closure->output + closure->outputLength, data, size);
+    closure->outputLength += size;
+  } else {
+    closure->status = ES_NO_MEMORY;
     png_error(png, NULL);
   }
 }
