@@ -45,5 +45,5 @@ export interface DecodedImageData {
 	data: Buffer;
 }
 
-export function encodePng(width: number, height: number, data: Buffer, options?: PngConfig): Promise<Buffer>;
-export function decodePng(data: Buffer): Promise<DecodedImageData>;
+export function encodePNG(width: number, height: number, data: Buffer, options?: PngConfig): Promise<Buffer>;
+export function decodePNG(data: Buffer): Promise<DecodedImageData>;
