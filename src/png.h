@@ -130,7 +130,7 @@ static error_status write_png(PngWriteClosure *closure) {
     return status;
   }
 
-  info = png_create_info_struct (png);
+  info = png_create_info_struct(png);
   if (info == NULL) {
     status = ES_NO_MEMORY;
     png_destroy_write_struct(&png, &info);
@@ -139,7 +139,7 @@ static error_status write_png(PngWriteClosure *closure) {
   }
 
 #ifdef PNG_SETJMP_SUPPORTED
-  if (setjmp_wrapper(png)) {
+  if (setjmp(png_jmpbuf(png))) {
     png_destroy_write_struct(&png, &info);
     free(rows);
     return status;
@@ -198,13 +198,13 @@ void read_func(png_structp png, png_bytep outBytes, png_size_t byteCountToRead) 
     closure->length -= byteCountToRead;
   } else {
     closure->status = ES_READING_PAST_END;
-    // error_status *error = (error_status *) png_get_error_ptr(png);
-    // if (*error == ES_SUCCESS) {
-    //   *error = ES_NO_MEMORY;
-    // }
     png_error(png, NULL);
   }
 }
+
+// void error_func(png_structp, png_const_charp message) {
+//   printf("PNG error: %s\n", message);
+// }
 
 static error_status read_png(PngReadClosure *closure) {
   if (closure->length < 8 || !png_check_sig(closure->data, 8)) return ES_INVALID_SIGNATURE;
@@ -217,8 +217,21 @@ static error_status read_png(PngReadClosure *closure) {
     png_destroy_read_struct(&png_ptr, NULL, NULL);
     return ES_NO_MEMORY;
   }
+  
+  uint8_t *buffer = NULL;
+  png_bytep *rowPointers = NULL;
+
+#ifdef PNG_SETJMP_SUPPORTED
+  if (setjmp(png_jmpbuf(png_ptr))) {
+    png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+    if (rowPointers) free(rowPointers);
+    if (buffer) free(buffer);
+    return ES_FAILED;
+  }
+#endif
 
   png_set_read_fn(png_ptr, closure, read_func);
+  // png_set_error_fn(png_ptr, NULL, error_func, NULL);
   png_read_info(png_ptr, info_ptr);
 
   png_uint_32 width = 0;
@@ -227,15 +240,14 @@ static error_status read_png(PngReadClosure *closure) {
   int colorType = -1;
   int interlaceMethod = 0;
   int number_of_passes = 1;
-  png_uint_32 retval = png_get_IHDR(
-    png_ptr, info_ptr, &width, &height, &bitDepth, &colorType, &interlaceMethod, NULL, NULL);
+  png_uint_32 retval = png_get_IHDR(png_ptr, info_ptr, &width, &height, &bitDepth, &colorType, &interlaceMethod, NULL, NULL);
   if (retval != 1) {
-    png_destroy_read_struct(&png_ptr, NULL, NULL);
+    png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
     return ES_FAILED;
   }
 
-  printf("bitDepth: %d, interlaceMethod: %d\n", bitDepth, interlaceMethod);
-  uint8_t *buffer = (uint8_t*)malloc(width * height * 4);
+  // printf("bitDepth: %d, interlaceMethod: %d\n", bitDepth, interlaceMethod);
+  buffer = (uint8_t*)malloc(width * height * 4);
 
   if (colorType == PNG_COLOR_TYPE_PALETTE) png_set_palette_to_rgb(png_ptr);
   if (colorType == PNG_COLOR_TYPE_GRAY || colorType == PNG_COLOR_TYPE_GRAY_ALPHA) png_set_gray_to_rgb(png_ptr);
@@ -245,7 +257,7 @@ static error_status read_png(PngReadClosure *closure) {
   if (bitDepth < 8) png_set_packing(png_ptr);
   if (interlaceMethod == PNG_INTERLACE_ADAM7) number_of_passes = png_set_interlace_handling(png_ptr);
 
-  png_bytep *rowPointers = new png_bytep[height];
+  rowPointers = (png_bytep*)malloc(sizeof(png_bytep) * height);
   png_bytep rowData = (png_bytep)buffer;
   
   for (png_uint_32 row = 0; row < height; row++) {
@@ -255,9 +267,9 @@ static error_status read_png(PngReadClosure *closure) {
 
   png_read_image(png_ptr, rowPointers);
 
-  delete[] rowPointers;
+  free(rowPointers);
 
-  png_destroy_read_struct(&png_ptr, NULL, NULL);
+  png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
   closure->width = width;
   closure->height = height;
   closure->buffer = buffer;

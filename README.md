@@ -1,6 +1,9 @@
 # ag-images
 
 ```
-npm install --build-from-source
+npm install ag-images
+```
+
+```
 git submodule update --init --recursive
 ```
