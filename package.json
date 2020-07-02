@@ -1,6 +1,6 @@
 {
   "name": "ag-images",
-  "description": "",
+  "description": "Library for loading and saving PNG files",
   "version": "1.0.5",
   "main": "index.js",
   "browser": "browser.js",
@@ -8,7 +8,7 @@
   "homepage": "https://github.com/Agamnentzar/ag-images",
   "repository": "git://github.com/Agamnentzar/ag-images.git",
   "scripts": {
-    "test": "mocha test/*.spec.js",
+    "test": "mocha test/*.spec.js --timeout 30000",
     "build": "node-gyp rebuild -j 8",
     "install": "node-pre-gyp install --fallback-to-build"
   },

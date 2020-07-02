@@ -1,9 +1,9 @@
-const { encodePNG, decodePNG } = require('../');
+const { encodePNG, decodePNG, PNG_FILTER_NONE } = require('../');
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
 
-describe('encodePNG', () => {
+describe('encode / decode', () => {
   it('throws on invalid arguments', async () => {
     await assert.rejects(() => encodePNG());
     await assert.rejects(() => encodePNG('x'));
@@ -15,7 +15,7 @@ describe('encodePNG', () => {
     const buffer = await encodePNG(1, 1, data, {});
     assert.equal(buffer.toString('base64'), 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAABmJLR0QA/wD/AP+gvaeTAAAAC0lEQVQImWNgAAIAAAUAAWJVMogAAAAASUVORK5CYII=');
   });
-  
+
   it(`doesn't crash on bad file`, async () => {
     const png = fs.readFileSync(path.join(__dirname, `fail.png`));
     await assert.rejects(() => decodePNG(png));
@@ -51,4 +51,30 @@ describe('encodePNG', () => {
     const buffer = await encodePNG(width, height, data, {});
     fs.writeFileSync(path.join(__dirname, `${name}.out.png`), buffer);
   }));
+
+  it.skip(`read/write speed test`, async () => {
+    const files = fs.readdirSync('E:\\Downloads\\test')
+      .filter(f => /\.png$/.test(f))
+      .map(f => fs.readFileSync(`E:\\Downloads\\test\\${f}`));
+    const decoded = [];
+
+    {
+      const start = Date.now();
+      for (const f of files) {
+        const png = await decodePNG(f);
+        decoded.push(png);
+      }
+      console.log(`read done in ${(Date.now() - start).toFixed(2)} ms`);
+    }
+
+    {
+      const start = Date.now();
+      let totalLength = 0;
+      for (const f of decoded) {
+        const buffer = await encodePNG(f.width, f.height, f.data, { compressionLevel: 2, filters: PNG_FILTER_NONE });
+        totalLength += buffer.byteLength;
+      }
+      console.log(`write done in ${(Date.now() - start).toFixed(2)} ms, length: ${(totalLength / (1024 * 1024)).toFixed(1)} MB`);
+    }
+  })
 });
