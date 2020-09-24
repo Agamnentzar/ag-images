@@ -251,7 +251,7 @@ static error_status read_png(PngReadClosure *closure) {
 
   if (colorType == PNG_COLOR_TYPE_PALETTE) png_set_palette_to_rgb(png_ptr);
   if (colorType == PNG_COLOR_TYPE_GRAY || colorType == PNG_COLOR_TYPE_GRAY_ALPHA) png_set_gray_to_rgb(png_ptr);
-  if (colorType != PNG_COLOR_TYPE_RGB_ALPHA) png_set_filler(png_ptr, 0, PNG_FILLER_AFTER);
+  if (colorType != PNG_COLOR_TYPE_RGB_ALPHA) png_set_filler(png_ptr, 0xff, PNG_FILLER_AFTER);
   if (png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS)) png_set_tRNS_to_alpha(png_ptr);
   if (bitDepth == 16) png_set_strip_16(png_ptr);
   if (bitDepth < 8) png_set_packing(png_ptr);

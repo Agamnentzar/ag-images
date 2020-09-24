@@ -13,10 +13,11 @@ describe('encode / decode', () => {
   it('encodes image', async () => {
     const data = Buffer.from([0, 0, 0, 0]);
     const buffer = await encodePNG(1, 1, data, {});
-    assert.equal(buffer.toString('base64'), 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAABmJLR0QA/wD/AP+gvaeTAAAAC0lEQVQImWNgAAIAAAUAAWJVMogAAAAASUVORK5CYII=');
+    assert.strictEqual(buffer.toString('base64'), 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAABmJLR0QA/wD/AP+gvaeTAAAAC0lEQVQImWNgAAIAAAUAAWJVMogAAAAASUVORK5CYII=');
   });
 
   it(`doesn't crash on bad file`, async () => {
+    // this prints "libpng error: undefined" in console
     const png = fs.readFileSync(path.join(__dirname, `fail.png`));
     await assert.rejects(() => decodePNG(png));
   })
@@ -29,6 +30,7 @@ describe('encode / decode', () => {
     { name: 'pal', width: 32, height: 32 },
     { name: '1bit', width: 300, height: 225 },
     { name: 'interlace', width: 1024, height: 768 },
+    { name: 'shino', width: 200, height: 200 },
   ];
 
   images.forEach(({ name, width, height }) => it(`decodes image (${name})`, async () => {
@@ -39,11 +41,11 @@ describe('encode / decode', () => {
 
     assert(image);
     assert(image.data);
-    assert.equal(image.width, width);
-    assert.equal(image.height, height);
+    assert.strictEqual(image.width, width);
+    assert.strictEqual(image.height, height);
 
     const expected = fs.readFileSync(path.join(__dirname, `${name}.data`));
-    assert.equal(Buffer.compare(image.data, expected), 0);
+    assert.strictEqual(Buffer.compare(image.data, expected), 0);
   }));
 
   images.forEach(({ name, width, height }) => it(`encodes image (${name})`, async () => {
