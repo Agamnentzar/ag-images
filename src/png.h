@@ -47,7 +47,7 @@ struct PngWriteClosure {
   uint32_t width;
   uint32_t height;
   uint8_t *data;
-  Nan::Persistent<v8::Value, v8::CopyablePersistentTraits<v8::Value>> dataRef;
+  Nan::Persistent<v8::Value> dataRef;
   error_status status = ES_SUCCESS;
 
   // output
@@ -180,7 +180,7 @@ struct PngReadClosure {
   // input
   uint8_t *data;
   size_t length;
-  Nan::Persistent<v8::Value, v8::CopyablePersistentTraits<v8::Value>> dataRef;
+  Nan::Persistent<v8::Value> dataRef;
   Nan::Callback cb;
   error_status status = ES_SUCCESS;
 

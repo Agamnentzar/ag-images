@@ -68,6 +68,7 @@ void to_png_buffer_after(uv_work_t *req, int) {
     closure->cb.Call(2, argv, &async);
   }
 
+  closure->cb.Reset();
   closure->dataRef.Reset();
   delete closure;
 }
@@ -124,6 +125,7 @@ void decode_png_buffer_after(uv_work_t *req, int) {
     closure->cb.Call(4, argv, &async);
   }
 
+  closure->cb.Reset();
   closure->dataRef.Reset();
   delete closure;
 }
