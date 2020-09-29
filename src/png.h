@@ -9,13 +9,13 @@
 #include <stdint.h> // node < 7 uses libstdc++ on macOS which lacks complete c++11
 
 enum error_status {
-    ES_SUCCESS = 0,
-    ES_NO_MEMORY,
-    ES_WRITE_ERROR,
-    ES_INVALID_SIGNATURE,
-    ES_FAILED,
-    ES_READING_PAST_END,
-    ES_INVALID_FORMAT,
+  ES_SUCCESS = 0,
+  ES_NO_MEMORY,
+  ES_WRITE_ERROR,
+  ES_INVALID_SIGNATURE,
+  ES_FAILED,
+  ES_READING_PAST_END,
+  ES_INVALID_FORMAT,
 };
 
 static char* error_status_to_string(error_status status) {
@@ -246,8 +246,11 @@ static error_status read_png(PngReadClosure *closure) {
     return ES_FAILED;
   }
 
-  // printf("bitDepth: %d, interlaceMethod: %d\n", bitDepth, interlaceMethod);
   buffer = (uint8_t*)malloc(width * height * 4);
+  if (!buffer) {
+    png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+    return ES_NO_MEMORY;
+  }
 
   if (colorType == PNG_COLOR_TYPE_PALETTE) png_set_palette_to_rgb(png_ptr);
   if (colorType == PNG_COLOR_TYPE_GRAY || colorType == PNG_COLOR_TYPE_GRAY_ALPHA) png_set_gray_to_rgb(png_ptr);
@@ -258,6 +261,12 @@ static error_status read_png(PngReadClosure *closure) {
   if (interlaceMethod == PNG_INTERLACE_ADAM7) number_of_passes = png_set_interlace_handling(png_ptr);
 
   rowPointers = (png_bytep*)malloc(sizeof(png_bytep) * height);
+  if (!rowPointers) {
+    free(buffer);
+    png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+    return ES_NO_MEMORY;
+  }
+
   png_bytep rowData = (png_bytep)buffer;
   
   for (png_uint_32 row = 0; row < height; row++) {

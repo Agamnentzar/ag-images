@@ -53,7 +53,7 @@ void to_png_buffer(uv_work_t *req) {
   closure->status = write_png(closure);
 }
 
-void to_png_buffer_after(uv_work_t *req) {
+void to_png_buffer_after(uv_work_t *req, int) {
   Nan::HandleScope scope;
   Nan::AsyncResource async("to_png_buffer_after");
   auto closure = static_cast<PngWriteClosure*>(req->data);
@@ -88,9 +88,6 @@ NAN_METHOD(encodePNG) {
     return Nan::ThrowTypeError("Invalid buffer size");
   }
 
-  closure->data = (uint8_t*)node::Buffer::Data(info[2]);
-  closure->dataRef.Reset(info[2]);
-
   auto error = parsePNGArgs(info[3], closure);
 
   if (error) {
@@ -98,11 +95,13 @@ NAN_METHOD(encodePNG) {
     return Nan::ThrowTypeError(error);
   }
 
+  closure->data = (uint8_t*)node::Buffer::Data(info[2]);
+  closure->dataRef.Reset(info[2]);
   closure->cb.Reset(info[4].As<Function>());
 
   uv_work_t* req = new uv_work_t;
   req->data = closure;
-  uv_queue_work(uv_default_loop(), req, to_png_buffer, (uv_after_work_cb)to_png_buffer_after);
+  uv_queue_work(uv_default_loop(), req, to_png_buffer, to_png_buffer_after);
 }
 
 void decode_png_buffer(uv_work_t *req) {
@@ -110,7 +109,7 @@ void decode_png_buffer(uv_work_t *req) {
   closure->status = read_png(closure);
 }
 
-void decode_png_buffer_after(uv_work_t *req) {
+void decode_png_buffer_after(uv_work_t *req, int) {
   Nan::HandleScope scope;
   Nan::AsyncResource async("decode_png_buffer_after");
   auto closure = static_cast<PngReadClosure*>(req->data);
@@ -137,13 +136,12 @@ NAN_METHOD(decodePNG) {
   auto closure = new PngReadClosure();
   closure->data = (uint8_t*)node::Buffer::Data(info[0]);
   closure->length = (size_t)node::Buffer::Length(info[0]);
-  Nan::Persistent<v8::Value, v8::CopyablePersistentTraits<v8::Value>> dataRef(info[1]);
-  closure->dataRef = dataRef;
+  closure->dataRef.Reset(info[0]);
   closure->cb.Reset(info[1].As<Function>());
 
   uv_work_t* req = new uv_work_t;
   req->data = closure;
-  uv_queue_work(uv_default_loop(), req, decode_png_buffer, (uv_after_work_cb)decode_png_buffer_after);
+  uv_queue_work(uv_default_loop(), req, decode_png_buffer, decode_png_buffer_after);
 }
 
 void Initialize(Nan::ADDON_REGISTER_FUNCTION_ARGS_TYPE target) {
