@@ -90,13 +90,7 @@ static void write_func(png_structp png, png_bytep data, png_size_t size) {
 }
 
 static error_status write_png(PngWriteClosure *closure) {
-  unsigned int i;
   error_status status = ES_SUCCESS;
-  png_structp png;
-  png_infop info;
-  png_color_16 white;
-  int png_color_type;
-  int bpc;
   unsigned int width = closure->width;
   unsigned int height = closure->height;
   uint8_t *data = closure->data;
@@ -114,9 +108,12 @@ static error_status write_png(PngWriteClosure *closure) {
   }
 
   int stride = width * 4; // cairo_image_surface_get_stride(surface);
-  for (i = 0; i < height; i++) {
+  for (int i = 0; i < height; i++) {
     rows[i] = (png_byte *) data + i * stride;
   }
+
+  png_structp png = {};
+  png_infop info = {};
 
 #ifdef PNG_USER_MEM_SUPPORTED
   png = png_create_write_struct_2(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL, NULL, NULL, NULL);
@@ -155,12 +152,13 @@ static error_status write_png(PngWriteClosure *closure) {
     png_set_pHYs(png, info, res, res, PNG_RESOLUTION_METER);
   }
 
-  bpc = 8;
-  png_color_type = PNG_COLOR_TYPE_RGB_ALPHA;
+  int bpc = 8;
+  int png_color_type = PNG_COLOR_TYPE_RGB_ALPHA;
 
   png_set_IHDR(png, info, width, height, bpc, png_color_type, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
 
   if (png_color_type != PNG_COLOR_TYPE_PALETTE) {
+    png_color_16 white = {};
     white.gray = (1 << bpc) - 1;
     white.red = white.blue = white.green = white.gray;
     png_set_bKGD(png, info, &white);
@@ -202,9 +200,12 @@ void read_func(png_structp png, png_bytep outBytes, png_size_t byteCountToRead) 
   }
 }
 
-// void error_func(png_structp, png_const_charp message) {
-//   printf("PNG error: %s\n", message);
+// void error_func(png_structrp, png_const_charp message) {
+//   fprintf(stderr, "libpng error: %s\n", message);
 // }
+
+static void noop_func(png_structrp, png_const_charp) {
+}
 
 static error_status read_png(PngReadClosure *closure) {
   if (closure->length < 8 || !png_check_sig(closure->data, 8)) return ES_INVALID_SIGNATURE;
@@ -231,7 +232,7 @@ static error_status read_png(PngReadClosure *closure) {
 #endif
 
   png_set_read_fn(png_ptr, closure, read_func);
-  // png_set_error_fn(png_ptr, NULL, error_func, NULL);
+  png_set_error_fn(png_ptr, NULL, NULL, noop_func); // ignore warnings
   png_read_info(png_ptr, info_ptr);
 
   png_uint_32 width = 0;
