@@ -8,6 +8,20 @@
                 "config/<(OS)/",
                 "zlib"
             ],
+            "defines": [
+                "HAVE_STDARG_H"
+            ],
+            "conditions": [
+                ['OS=="win"', {
+                    'defines': [
+                        'ZLIB_WINAPI'
+                    ]
+                }, {
+                    'defines': [
+                        'HAVE_UNISTD_H'
+                    ]
+                }]
+            ],
             "sources" : [
                 "zlib/adler32.c",
                 "zlib/compress.c",
