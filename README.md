@@ -4,6 +4,8 @@ Library for loading and saving PNG files
 
 ```
 npm install ag-images
+
+# for compatibility with Node < 20, use npm install ag-images@^1.0.0
 ```
 
 ```ts
