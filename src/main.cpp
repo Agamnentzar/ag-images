@@ -1,11 +1,82 @@
 #include <nan.h>
 #include <v8.h>
-#include <assert.h>
-#include <cctype>
 #include "./png.h"
 
 using namespace v8;
 using namespace std;
+
+class PngDecodeWorker : public Nan::AsyncWorker {
+ public:
+  PngDecodeWorker(Nan::Callback *callback, PngReadClosure* closure)
+    : Nan::AsyncWorker(callback), closure(closure) {}
+
+  ~PngDecodeWorker() {
+    delete closure;
+  }
+
+  // Executed inside the worker-thread.
+  void Execute() override {
+    closure->status = read_png(closure);
+    if (closure->status != 0) {
+      SetErrorMessage("PNG decoding failed.");
+    }
+  }
+
+  // Executed when the async work is complete
+  void HandleOKCallback() override {
+    Nan::HandleScope scope;
+  
+    Local<Object> buf = Nan::NewBuffer((char*)closure->buffer, closure->width * closure->height * 4, [] (char *data, void* hint) {
+      free(data);
+    }, nullptr).ToLocalChecked();
+    Local<Value> argv[4] = { Nan::Null(), buf, Nan::New<v8::Int32>(closure->width), Nan::New<v8::Int32>(closure->height) };
+    callback->Call(4, argv, async_resource);
+  }
+
+  void HandleErrorCallback() override {
+    Nan::HandleScope scope;
+    Local<Value> argv[1] = { Nan::Error(ErrorMessage()) };
+    callback->Call(1, argv, async_resource);
+  }
+
+ private:
+  PngReadClosure* closure;
+};
+
+class PngEncodeWorker : public Nan::AsyncWorker {
+ public:
+  PngEncodeWorker(Nan::Callback *callback, PngWriteClosure* closure)
+    : Nan::AsyncWorker(callback), closure(closure) {}
+
+  ~PngEncodeWorker() {
+    delete closure;
+  }
+
+  // Executed inside the worker-thread.
+  void Execute() override {
+    closure->status = write_png(closure);
+    if (closure->status != 0) {
+      SetErrorMessage("PNG encoding failed.");
+    }
+  }
+
+  // Executed when the async work is complete
+  void HandleOKCallback() override {
+    Nan::HandleScope scope;
+    Local<Object> buf = Nan::NewBuffer((char*)closure->output, closure->outputLength).ToLocalChecked();
+    Local<Value> argv[2] = { Nan::Null(), buf };
+    callback->Call(2, argv, async_resource);
+  }
+
+  void HandleErrorCallback() override {
+    Nan::HandleScope scope;
+    Local<Value> argv[1] = { Nan::Error(ErrorMessage()) };
+    callback->Call(1, argv, async_resource);
+  }
+
+ private:
+  PngWriteClosure* closure;
+};
 
 static char *parsePNGArgs(Local<Value> arg, PngWriteClosure *pngargs) {
   if (arg->IsObject()) {
@@ -81,7 +152,6 @@ NAN_METHOD(encodePNG) {
   auto closure = new PngWriteClosure();
   closure->width = Nan::To<uint32_t>(info[0]).FromMaybe(0);
   closure->height = Nan::To<uint32_t>(info[1]).FromMaybe(0);
-  Local<Context> ctx = Nan::GetCurrentContext();
   auto length = node::Buffer::Length(info[2]);
 
   if (length != (closure->width * closure->height * 4)) {
@@ -90,7 +160,6 @@ NAN_METHOD(encodePNG) {
   }
 
   auto error = parsePNGArgs(info[3], closure);
-
   if (error) {
     delete closure;
     return Nan::ThrowTypeError(error);
@@ -98,12 +167,11 @@ NAN_METHOD(encodePNG) {
 
   closure->data = (uint8_t*)node::Buffer::Data(info[2]);
   closure->dataRef.Reset(info[2]);
-  closure->cb.Reset(info[4].As<Function>());
 
-  uv_work_t* req = new uv_work_t;
-  req->data = closure;
-  uv_queue_work(uv_default_loop(), req, to_png_buffer, to_png_buffer_after);
+  Nan::Callback *callback = new Nan::Callback(info[4].As<Function>());
+  Nan::AsyncQueueWorker(new PngEncodeWorker(callback, closure));
 }
+
 
 void decode_png_buffer(uv_work_t *req) {
   auto closure = static_cast<PngReadClosure*>(req->data);
@@ -131,7 +199,7 @@ void decode_png_buffer_after(uv_work_t *req, int) {
 }
 
 NAN_METHOD(decodePNG) {
-  if (!node::Buffer::HasInstance(info[0]) || !info[1]->IsFunction()) {
+  if (!node::Buffer::HasInstance(info[0]) ||!info[1]->IsBoolean() || !info[2]->IsFunction()) {
     return Nan::ThrowTypeError("Invalid arguments");
   }
 
@@ -139,11 +207,9 @@ NAN_METHOD(decodePNG) {
   closure->data = (uint8_t*)node::Buffer::Data(info[0]);
   closure->length = (size_t)node::Buffer::Length(info[0]);
   closure->dataRef.Reset(info[0]);
-  closure->cb.Reset(info[1].As<Function>());
-
-  uv_work_t* req = new uv_work_t;
-  req->data = closure;
-  uv_queue_work(uv_default_loop(), req, decode_png_buffer, decode_png_buffer_after);
+  closure->premultiplied = info[1]->BooleanValue(info.GetIsolate());
+  Nan::Callback *callback = new Nan::Callback(info[2].As<Function>());
+  Nan::AsyncQueueWorker(new PngDecodeWorker(callback, closure));
 }
 
 void Initialize(Nan::ADDON_REGISTER_FUNCTION_ARGS_TYPE target) {

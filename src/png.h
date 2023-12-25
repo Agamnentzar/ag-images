@@ -8,6 +8,35 @@
 #include <nan.h>
 #include <stdint.h> // node < 7 uses libstdc++ on macOS which lacks complete c++11
 
+
+#define WUFFS_IMPLEMENTATION
+
+#define WUFFS_CONFIG__STATIC_FUNCTIONS
+
+// Defining the WUFFS_CONFIG__MODULE* macros are optional, but it lets users of
+// release/c/etc.c choose which parts of Wuffs to build. That file contains the
+// entire Wuffs standard library, implementing a variety of codecs and file
+// formats. Without this macro definition, an optimizing compiler or linker may
+// very well discard Wuffs code for unused codecs, but listing the Wuffs
+// modules we use makes that process explicit. Preprocessing means that such
+// code simply isn't compiled.
+#define WUFFS_CONFIG__MODULE__ADLER32
+#define WUFFS_CONFIG__MODULE__AUX__BASE
+#define WUFFS_CONFIG__MODULE__AUX__IMAGE
+#define WUFFS_CONFIG__MODULE__BASE
+#define WUFFS_CONFIG__MODULE__BMP
+#define WUFFS_CONFIG__MODULE__CRC32
+#define WUFFS_CONFIG__MODULE__DEFLATE
+#define WUFFS_CONFIG__MODULE__GIF
+#define WUFFS_CONFIG__MODULE__JPEG
+#define WUFFS_CONFIG__MODULE__NETPBM
+#define WUFFS_CONFIG__MODULE__NIE
+#define WUFFS_CONFIG__MODULE__PNG
+#define WUFFS_CONFIG__MODULE__TGA
+#define WUFFS_CONFIG__MODULE__WBMP
+#define WUFFS_CONFIG__MODULE__ZLIB
+#include "wuffs-v0.4.c"
+
 enum error_status {
   ES_SUCCESS = 0,
   ES_NO_MEMORY,
@@ -67,6 +96,49 @@ bool setjmp_wrapper(png_structp png) {
 
 #define INITIAL_SIZE 4096
 
+class MyDecodeCallbacks : public wuffs_aux::DecodeImageCallbacks {
+ public:
+  MyDecodeCallbacks(bool _premultiplied) : m_fourcc(0), premultipled(_premultiplied) {}
+
+  uint32_t m_fourcc;
+  bool premultipled;
+
+ private:
+  wuffs_base__image_decoder::unique_ptr  //
+  SelectDecoder(uint32_t fourcc,
+                wuffs_base__slice_u8 prefix_data,
+                bool prefix_closed) override {
+    // Save the fourcc value (you can think of it as like a 'MIME type' but in
+    // uint32_t form) before calling the superclass' implementation.
+    //
+    // The "if (m_fourcc == 0)" is because SelectDecoder can be called multiple
+    // times. Files that are nominally BMP images can contain complete JPEG or
+    // PNG images. This program prints the outer file format, the first one
+    // encountered, not the inner one.
+    if (m_fourcc == 0) {
+      m_fourcc = fourcc;
+    }
+    return wuffs_aux::DecodeImageCallbacks::SelectDecoder(fourcc, prefix_data,
+                                                          prefix_closed);
+  }
+
+  wuffs_base__pixel_format  //
+  SelectPixfmt(const wuffs_base__image_config& image_config) override {
+    auto format = this->premultipled ? WUFFS_BASE__PIXEL_FORMAT__RGBA_PREMUL :
+      WUFFS_BASE__PIXEL_FORMAT__RGBA_NONPREMUL;
+
+    return wuffs_base__make_pixel_format(format);
+  }
+
+  AllocPixbufResult  //
+  AllocPixbuf(const wuffs_base__image_config& image_config,
+              bool allow_uninitialized_memory) override {
+    return wuffs_aux::DecodeImageCallbacks::AllocPixbuf(
+        image_config, allow_uninitialized_memory);
+  }
+};
+
+
 static void write_func(png_structp png, png_bytep data, png_size_t size) {
   PngWriteClosure *closure = (PngWriteClosure *) png_get_io_ptr(png);
 
@@ -90,7 +162,7 @@ static void write_func(png_structp png, png_bytep data, png_size_t size) {
 }
 
 static error_status write_png(PngWriteClosure *closure) {
-  error_status status = ES_SUCCESS;
+    error_status status = ES_SUCCESS;
   unsigned int width = closure->width;
   unsigned int height = closure->height;
   uint8_t *data = closure->data;
@@ -181,6 +253,7 @@ struct PngReadClosure {
   Nan::Persistent<v8::Value> dataRef;
   Nan::Callback cb;
   error_status status = ES_SUCCESS;
+  bool premultiplied;
 
   // output
   uint32_t width;
@@ -210,78 +283,27 @@ static void noop_func(png_structrp, png_const_charp) {
 static error_status read_png(PngReadClosure *closure) {
   if (closure->length < 8 || !png_check_sig(closure->data, 8)) return ES_INVALID_SIGNATURE;
 
-  auto png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-  if (!png_ptr) return ES_NO_MEMORY;
-
-  auto info_ptr = png_create_info_struct(png_ptr);
-  if (!info_ptr) {
-    png_destroy_read_struct(&png_ptr, NULL, NULL);
-    return ES_NO_MEMORY;
-  }
-  
-  uint8_t *buffer = NULL;
-  png_bytep *rowPointers = NULL;
-
-#ifdef PNG_SETJMP_SUPPORTED
-  if (setjmp(png_jmpbuf(png_ptr))) {
-    png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
-    if (rowPointers) free(rowPointers);
-    if (buffer) free(buffer);
+  MyDecodeCallbacks callbacks(closure->premultiplied);
+  wuffs_aux::sync_io::MemoryInput input(closure->data, closure->length);
+  wuffs_aux::DecodeImageResult res = wuffs_aux::DecodeImage(callbacks, input);
+  if (!res.error_message.empty()) {
     return ES_FAILED;
-  }
-#endif
-
-  png_set_read_fn(png_ptr, closure, read_func);
-  png_set_error_fn(png_ptr, NULL, NULL, noop_func); // ignore warnings
-  png_read_info(png_ptr, info_ptr);
-
-  png_uint_32 width = 0;
-  png_uint_32 height = 0;
-  int bitDepth = 0;
-  int colorType = -1;
-  int interlaceMethod = 0;
-  int number_of_passes = 1;
-  png_uint_32 retval = png_get_IHDR(png_ptr, info_ptr, &width, &height, &bitDepth, &colorType, &interlaceMethod, NULL, NULL);
-  if (retval != 1) {
-    png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+  } else if (closure->premultiplied && res.pixbuf.pixcfg.pixel_format().repr !=
+             WUFFS_BASE__PIXEL_FORMAT__RGBA_PREMUL) {
+    return ES_FAILED;
+  }  else if (!closure->premultiplied && res.pixbuf.pixcfg.pixel_format().repr !=
+             WUFFS_BASE__PIXEL_FORMAT__RGBA_NONPREMUL) {
     return ES_FAILED;
   }
 
-  buffer = (uint8_t*)malloc(width * height * 4);
-  if (!buffer) {
-    png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
-    return ES_NO_MEMORY;
-  }
+  wuffs_base__table_u8 table = res.pixbuf.plane(0);
+  uint32_t w = res.pixbuf.pixcfg.width();
+  uint32_t h = res.pixbuf.pixcfg.height();
+  closure->width = w;
+  closure->height = h;
 
-  if (colorType == PNG_COLOR_TYPE_PALETTE) png_set_palette_to_rgb(png_ptr);
-  if (colorType == PNG_COLOR_TYPE_GRAY || colorType == PNG_COLOR_TYPE_GRAY_ALPHA) png_set_gray_to_rgb(png_ptr);
-  if (colorType != PNG_COLOR_TYPE_RGB_ALPHA) png_set_filler(png_ptr, 0xff, PNG_FILLER_AFTER);
-  if (png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS)) png_set_tRNS_to_alpha(png_ptr);
-  if (bitDepth == 16) png_set_strip_16(png_ptr);
-  if (bitDepth < 8) png_set_packing(png_ptr);
-  if (interlaceMethod == PNG_INTERLACE_ADAM7) number_of_passes = png_set_interlace_handling(png_ptr);
+  // WARNING: this malloc needs to be free'd by the caller
+  closure->buffer = (uint8_t*)res.pixbuf_mem_owner.release();
 
-  rowPointers = (png_bytep*)malloc(sizeof(png_bytep) * height);
-  if (!rowPointers) {
-    free(buffer);
-    png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
-    return ES_NO_MEMORY;
-  }
-
-  png_bytep rowData = (png_bytep)buffer;
-  
-  for (png_uint_32 row = 0; row < height; row++) {
-    rowPointers[row] = rowData;
-    rowData += width * 4;
-  }
-
-  png_read_image(png_ptr, rowPointers);
-
-  free(rowPointers);
-
-  png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
-  closure->width = width;
-  closure->height = height;
-  closure->buffer = buffer;
   return ES_SUCCESS;
 }

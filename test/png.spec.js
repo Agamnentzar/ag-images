@@ -31,11 +31,13 @@ describe('encode / decode', () => {
     { name: '1bit', width: 300, height: 225 },
     { name: 'interlace', width: 1024, height: 768 },
     { name: 'shino', width: 200, height: 200 },
+    { name: 'semitransparent', width: 128, height: 128, premul: true },
+    { name: 'semitransparent', width: 128, height: 128, premul: false },
   ];
 
-  images.forEach(({ name, width, height }) => it(`decodes image (${name})`, async () => {
+  images.forEach(({ name, width, height, premul }) => it(`decodes image (${name})`, async () => {
     const png = fs.readFileSync(path.join(__dirname, `${name}.png`));
-    const image = await decodePNG(png);
+    const image = await decodePNG(png, { premultiplied: premul });
 
     fs.writeFileSync(path.join(__dirname, `${name}.data`), image.data);
 
@@ -44,7 +46,13 @@ describe('encode / decode', () => {
     assert.strictEqual(image.width, width);
     assert.strictEqual(image.height, height);
 
-    const expected = fs.readFileSync(path.join(__dirname, `${name}.data`));
+    const expectedName = typeof premul !== 'undefined' ?
+      `${name}.${premul ? 'premul' : 'nonpremul'}.data`  :
+      `${name}.data`;
+
+    console.log(expectedName);
+    const expected = fs.readFileSync(path.join(__dirname, expectedName));
+
     assert.strictEqual(Buffer.compare(image.data, expected), 0);
   }));
 
@@ -54,29 +62,33 @@ describe('encode / decode', () => {
     fs.writeFileSync(path.join(__dirname, `${name}.out.png`), buffer);
   }));
 
-  it.skip(`read/write speed test`, async () => {
-    const files = fs.readdirSync('E:\\Downloads\\test')
-      .filter(f => /\.png$/.test(f))
-      .map(f => fs.readFileSync(`E:\\Downloads\\test\\${f}`));
-    const decoded = [];
+  if (process.env.SPEED_TEST_DIR) {
+    const speedTestDir = process.env.SPEED_TEST_DIR;
+    it(`read/write speed test`, async () => {
+      const files = fs.readdirSync(speedTestDir)
+        .filter(f => /\.png$/.test(f))
+        .map(f => fs.readFileSync(path.join(speedTestDir,f)));
+      const decoded = [];
 
-    {
-      const start = Date.now();
-      for (const f of files) {
-        const png = await decodePNG(f);
-        decoded.push(png);
+      {
+        const start = Date.now();
+        await Promise.all(files.map(async (f) => {
+          const png = await decodePNG(f);
+          decoded.push(png);
+        }));
+        console.log(`read done in ${(Date.now() - start).toFixed(2)} ms`);
       }
-      console.log(`read done in ${(Date.now() - start).toFixed(2)} ms`);
-    }
 
-    {
-      const start = Date.now();
-      let totalLength = 0;
-      for (const f of decoded) {
-        const buffer = await encodePNG(f.width, f.height, f.data, { compressionLevel: 2, filters: PNG_FILTER_NONE });
-        totalLength += buffer.byteLength;
+      {
+        const start = Date.now();
+        let totalLength = 0;
+
+        await Promise.all(decoded.map(async (f) => {
+          const buffer = await encodePNG(f.width, f.height, f.data, { compressionLevel: 2, filters: PNG_FILTER_NONE });
+          totalLength += buffer.byteLength;
+        }));
+        console.log(`write done in ${(Date.now() - start).toFixed(2)} ms, length: ${(totalLength / (1024 * 1024)).toFixed(1)} MB`);
       }
-      console.log(`write done in ${(Date.now() - start).toFixed(2)} ms, length: ${(totalLength / (1024 * 1024)).toFixed(1)} MB`);
-    }
-  })
+    })
+  }
 });
