@@ -20,13 +20,14 @@ exports.encodePNG = function (width, height, data, options) {
   });
 };
 
-exports.decodePNG = function (buffer) {
+exports.decodePNG = function (buffer, options) {
   return new Promise((resolve, reject) => {
-    bindings.decodePNG(buffer, (error, data, width, height) => {
+    const premultiplied = options?.premultiplied || false;
+    bindings.decodePNG(buffer, premultiplied, (error, data, width, height) => {
       if (error) {
         reject(error);
       } else {
-        resolve({ data, width, height });
+        resolve({ data, width, height, premultiplied });
       }
     })
   });
