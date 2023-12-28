@@ -11,7 +11,10 @@ class PngDecodeWorker : public Nan::AsyncWorker {
     : Nan::AsyncWorker(callback), closure(closure) {}
 
   ~PngDecodeWorker() {
+    closure->cb.Reset();
+    closure->dataRef.Reset();
     delete closure;
+    delete callback;
   }
 
   // Executed inside the worker-thread.
@@ -49,7 +52,10 @@ class PngEncodeWorker : public Nan::AsyncWorker {
     : Nan::AsyncWorker(callback), closure(closure) {}
 
   ~PngEncodeWorker() {
+    closure->cb.Reset();
+    closure->dataRef.Reset();
     delete closure;
+    delete callback;
   }
 
   // Executed inside the worker-thread.
@@ -63,7 +69,9 @@ class PngEncodeWorker : public Nan::AsyncWorker {
   // Executed when the async work is complete
   void HandleOKCallback() override {
     Nan::HandleScope scope;
-    Local<Object> buf = Nan::NewBuffer((char*)closure->output, closure->outputLength).ToLocalChecked();
+    Local<Object> buf = Nan::NewBuffer((char*)closure->output, closure->outputLength, [] (char *data, void* hint) {
+      free(data);
+    }, nullptr).ToLocalChecked();
     Local<Value> argv[2] = { Nan::Null(), buf };
     callback->Call(2, argv, async_resource);
   }
@@ -170,32 +178,6 @@ NAN_METHOD(encodePNG) {
 
   Nan::Callback *callback = new Nan::Callback(info[4].As<Function>());
   Nan::AsyncQueueWorker(new PngEncodeWorker(callback, closure));
-}
-
-
-void decode_png_buffer(uv_work_t *req) {
-  auto closure = static_cast<PngReadClosure*>(req->data);
-  closure->status = read_png(closure);
-}
-
-void decode_png_buffer_after(uv_work_t *req, int) {
-  Nan::HandleScope scope;
-  Nan::AsyncResource async("decode_png_buffer_after");
-  auto closure = static_cast<PngReadClosure*>(req->data);
-  delete req;
-
-  if (closure->status) {
-    Local<Value> argv[1] = { Exception::Error(Nan::New<String>(error_status_to_string(closure->status)).ToLocalChecked()) };
-    closure->cb.Call(1, argv, &async);
-  } else {
-    Local<Object> buf = Nan::NewBuffer((char*)closure->buffer, closure->width * closure->height * 4).ToLocalChecked();
-    Local<Value> argv[4] = { Nan::Null(), buf, Nan::New<v8::Int32>(closure->width), Nan::New<v8::Int32>(closure->height) };
-    closure->cb.Call(4, argv, &async);
-  }
-
-  closure->cb.Reset();
-  closure->dataRef.Reset();
-  delete closure;
 }
 
 NAN_METHOD(decodePNG) {
