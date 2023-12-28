@@ -5,6 +5,16 @@
 using namespace v8;
 using namespace std;
 
+inline MaybeLocal<v8::Object> NewBuffer(
+      char *data
+    , size_t length
+    , node::Buffer::FreeCallback callback
+    , void *hint
+  ) {
+    return node::Buffer::New(
+        v8::Isolate::GetCurrent(), data, length, callback, hint);
+  }
+
 class PngDecodeWorker : public Nan::AsyncWorker {
  public:
   PngDecodeWorker(Nan::Callback *callback, PngReadClosure* closure)
@@ -29,7 +39,7 @@ class PngDecodeWorker : public Nan::AsyncWorker {
   void HandleOKCallback() override {
     Nan::HandleScope scope;
   
-    Local<Object> buf = Nan::NewBuffer((char*)closure->buffer, closure->width * closure->height * 4, [] (char *data, void* hint) {
+    Local<Object> buf = NewBuffer((char*)closure->buffer, closure->width * closure->height * 4, [] (char *data, void* hint) {
       free(data);
     }, nullptr).ToLocalChecked();
     Local<Value> argv[4] = { Nan::Null(), buf, Nan::New<v8::Int32>(closure->width), Nan::New<v8::Int32>(closure->height) };
@@ -69,7 +79,7 @@ class PngEncodeWorker : public Nan::AsyncWorker {
   // Executed when the async work is complete
   void HandleOKCallback() override {
     Nan::HandleScope scope;
-    Local<Object> buf = Nan::NewBuffer((char*)closure->output, closure->outputLength, [] (char *data, void* hint) {
+    Local<Object> buf = NewBuffer((char*)closure->output, closure->outputLength, [] (char *data, void* hint) {
       free(data);
     }, nullptr).ToLocalChecked();
     Local<Value> argv[2] = { Nan::Null(), buf };
@@ -125,31 +135,6 @@ static char *parsePNGArgs(Local<Value> arg, PngWriteClosure *pngargs) {
   }
   
   return nullptr;
-}
-
-void to_png_buffer(uv_work_t *req) {
-  auto closure = static_cast<PngWriteClosure*>(req->data);
-  closure->status = write_png(closure);
-}
-
-void to_png_buffer_after(uv_work_t *req, int) {
-  Nan::HandleScope scope;
-  Nan::AsyncResource async("to_png_buffer_after");
-  auto closure = static_cast<PngWriteClosure*>(req->data);
-  delete req;
-
-  if (closure->status) {
-    Local<Value> argv[1] = { Exception::Error(Nan::New<String>(error_status_to_string(closure->status)).ToLocalChecked()) };
-    closure->cb.Call(1, argv, &async);
-  } else {
-    Local<Object> buf = Nan::NewBuffer((char*)closure->output, closure->outputLength).ToLocalChecked();
-    Local<Value> argv[2] = { Nan::Null(), buf };
-    closure->cb.Call(2, argv, &async);
-  }
-
-  closure->cb.Reset();
-  closure->dataRef.Reset();
-  delete closure;
 }
 
 NAN_METHOD(encodePNG) {
