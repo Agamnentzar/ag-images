@@ -261,25 +261,6 @@ struct PngReadClosure {
   uint8_t *buffer;
 };
 
-void read_func(png_structp png, png_bytep outBytes, png_size_t byteCountToRead) {
-  auto closure = (PngReadClosure*)png_get_io_ptr(png);
-  if (byteCountToRead <= closure->length) {
-    memcpy(outBytes, closure->data, byteCountToRead);
-    closure->data += byteCountToRead;
-    closure->length -= byteCountToRead;
-  } else {
-    closure->status = ES_READING_PAST_END;
-    png_error(png, NULL);
-  }
-}
-
-// void error_func(png_structrp, png_const_charp message) {
-//   fprintf(stderr, "libpng error: %s\n", message);
-// }
-
-static void noop_func(png_structrp, png_const_charp) {
-}
-
 static error_status read_png(PngReadClosure *closure) {
   if (closure->length < 8 || !png_check_sig(closure->data, 8)) return ES_INVALID_SIGNATURE;
 

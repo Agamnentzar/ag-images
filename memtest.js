@@ -19,6 +19,9 @@ async function run() {
     }
 
     await Promise.all(promises);
+    if (global.gc) {
+      global.gc();
+    }
   }
 }
 
