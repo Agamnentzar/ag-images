@@ -16,6 +16,12 @@ describe('encode / decode', () => {
     assert.strictEqual(buffer.toString('base64'), 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAABmJLR0QA/wD/AP+gvaeTAAAAC0lEQVQImWNgAAIAAAUAAWJVMogAAAAASUVORK5CYII=');
   });
 
+  it('encodes image with fastest encoder', async () => {
+    const data = Buffer.from([0, 0, 0, 0]);
+    const buffer = await encodePNG(1, 1, data, { compressionLevel: 0 });
+    assert.strictEqual(buffer.toString('base64'), 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAABWZkRUNSJJPjAOWrYpkAAAAQSURBVHgBAQUA+v8AAAAAAAAFAAFkeJU4AAAAAElFTkSuQmCC');
+  });
+
   it(`doesn't crash on bad file`, async () => {
     // this prints "libpng error: undefined" in console
     const png = fs.readFileSync(path.join(__dirname, `fail.png`));

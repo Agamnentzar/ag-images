@@ -7,7 +7,9 @@
 #include <pngconf.h>
 #include <nan.h>
 #include <stdint.h> // node < 7 uses libstdc++ on macOS which lacks complete c++11
+#include "fpng.h"
 
+#define USE_FPNG
 
 #define WUFFS_IMPLEMENTATION
 
@@ -47,7 +49,7 @@ enum error_status {
   ES_INVALID_FORMAT,
 };
 
-static char* error_status_to_string(error_status status) {
+static const char* error_status_to_string(error_status status) {
   switch (status) {
     case ES_SUCCESS: return "success";
     case ES_NO_MEMORY: return "no memory";
@@ -63,7 +65,7 @@ static char* error_status_to_string(error_status status) {
 // writing
 
 struct PngWriteClosure {
-  uint32_t compressionLevel = 6;
+  int32_t compressionLevel = 6;
   uint32_t filters = PNG_ALL_FILTERS;
   uint32_t resolution = 0; // 0 = unspecified
   // Indexed PNGs:
@@ -78,6 +80,9 @@ struct PngWriteClosure {
   uint8_t *data;
   Nan::Persistent<v8::Value> dataRef;
   error_status status = ES_SUCCESS;
+
+  // output for fpng (quality <= 0)
+  std::unique_ptr<std::vector<uint8_t>> outputVector = 0;
 
   // output
   uint8_t *output = 0;
@@ -138,7 +143,6 @@ class MyDecodeCallbacks : public wuffs_aux::DecodeImageCallbacks {
   }
 };
 
-
 static void write_func(png_structp png, png_bytep data, png_size_t size) {
   PngWriteClosure *closure = (PngWriteClosure *) png_get_io_ptr(png);
 
@@ -162,16 +166,28 @@ static void write_func(png_structp png, png_bytep data, png_size_t size) {
 }
 
 static error_status write_png(PngWriteClosure *closure) {
-    error_status status = ES_SUCCESS;
+  error_status status = ES_SUCCESS;
   unsigned int width = closure->width;
   unsigned int height = closure->height;
   uint8_t *data = closure->data;
-
   if (width == 0 || height == 0) {
     status = ES_WRITE_ERROR;
     return status;
   }
 
+  if (closure->compressionLevel <= 0) {
+    int flags = fpng::FPNG_ENCODE_SLOWER;
+    if (closure->compressionLevel == -1) {
+      flags = 0;
+    }
+
+    closure->outputVector = std::make_unique<std::vector<uint8_t>>();
+    auto fpng_status = fpng::fpng_encode_image_to_memory(closure->data, width, height, 4, *(closure->outputVector), flags);
+    if (!fpng_status) {
+      return ES_WRITE_ERROR;
+    }
+    return status;
+  }
   png_bytep *volatile rows = (png_bytep *) malloc(height * sizeof (png_byte*));
 
   if (rows == NULL) {
@@ -180,7 +196,7 @@ static error_status write_png(PngWriteClosure *closure) {
   }
 
   int stride = width * 4; // cairo_image_surface_get_stride(surface);
-  for (int i = 0; i < height; i++) {
+  for (unsigned int i = 0; i < height; i++) {
     rows[i] = (png_byte *) data + i * stride;
   }
 
@@ -256,9 +272,9 @@ struct PngReadClosure {
   bool premultiplied;
 
   // output
-  uint32_t width;
-  uint32_t height;
-  uint8_t *buffer;
+  uint32_t width = 0;
+  uint32_t height = 0;
+  uint8_t *buffer = nullptr;
 };
 
 static error_status read_png(PngReadClosure *closure) {
@@ -277,7 +293,6 @@ static error_status read_png(PngReadClosure *closure) {
     return ES_FAILED;
   }
 
-  wuffs_base__table_u8 table = res.pixbuf.plane(0);
   uint32_t w = res.pixbuf.pixcfg.width();
   uint32_t h = res.pixbuf.pixcfg.height();
   closure->width = w;
