@@ -27,7 +27,6 @@ async function run() {
       promises.push(decodePNG(buffer)
         .then(async image => {
           const out = await encodePNG(image.width, image.height, image.data, { compressionLevel: 0, filters: PNG_NO_FILTERS });
-          // fs.writeFileSync('/tmp/test.fpng.png', out);
           lastSize = (out.byteLength / (image.width * image.height * 4)).toFixed(2);
         }));
     }

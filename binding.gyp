@@ -11,7 +11,8 @@
                 "-Wno-missing-field-initializers",
                 "-Wextra",
                 "-O3",
-                "-fno-strict-aliasing"
+                "-fno-strict-aliasing",
+                "-DFPNG_NO_STDIO"
             ],
             "include_dirs": [
                 "<!(node -e \"require('nan')\")",
