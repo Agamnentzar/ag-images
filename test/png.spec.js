@@ -43,7 +43,9 @@ describe('encode / decode', () => {
 
   images.forEach(({ name, width, height, premul }) => it(`decodes image (${name})`, async () => {
     const png = fs.readFileSync(path.join(__dirname, `${name}.png`));
-    const image = await decodePNG(png, { premultiplied: premul });
+    const _image = await decodePNG(png);
+    const _encoded = await encodePNG(_image.width, _image.height, _image.data, { compressionLevel: 0 })
+    const image = await decodePNG(_encoded, { premultiplied: premul })
 
     fs.writeFileSync(path.join(__dirname, `${name}.data`), image.data);
 
@@ -90,7 +92,7 @@ describe('encode / decode', () => {
         let totalLength = 0;
 
         await Promise.all(decoded.map(async (f) => {
-          const buffer = await encodePNG(f.width, f.height, f.data, { compressionLevel: 2, filters: PNG_FILTER_NONE });
+          const buffer = await encodePNG(f.width, f.height, f.data, { compressionLevel: 0, filters: PNG_FILTER_NONE });
           totalLength += buffer.byteLength;
         }));
         console.log(`write done in ${(Date.now() - start).toFixed(2)} ms, length: ${(totalLength / (1024 * 1024)).toFixed(1)} MB`);

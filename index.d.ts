@@ -46,7 +46,7 @@ export interface DecodedImageData {
 }
 
 export interface DecodeOptions {
-	premultipled: boolean;
+	premultiplied: boolean;
 }
 
 export function encodePNG(width: number, height: number, data: Buffer, options?: PngConfig): Promise<Buffer>;
