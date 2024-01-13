@@ -79,9 +79,22 @@ class PngEncodeWorker : public Nan::AsyncWorker {
   // Executed when the async work is complete
   void HandleOKCallback() override {
     Nan::HandleScope scope;
+    if (closure->outputVector) {
+      auto vectorPtr = closure->outputVector.release();
+      Local<Object> buf = NewBuffer((char*)vectorPtr->data(), vectorPtr->size(), [] (char *data, void* hint) {
+        auto output = static_cast<std::vector<uint8_t*>*>(hint);
+        delete output;
+      }, vectorPtr).ToLocalChecked();
+    Local<Value> argv[2] = { Nan::Null(), buf };
+    callback->Call(2, argv, async_resource);
+    return;
+      
+  }
+
     Local<Object> buf = NewBuffer((char*)closure->output, closure->outputLength, [] (char *data, void* hint) {
       free(data);
     }, nullptr).ToLocalChecked();
+
     Local<Value> argv[2] = { Nan::Null(), buf };
     callback->Call(2, argv, async_resource);
   }
@@ -96,13 +109,13 @@ class PngEncodeWorker : public Nan::AsyncWorker {
   PngWriteClosure* closure;
 };
 
-static char *parsePNGArgs(Local<Value> arg, PngWriteClosure *pngargs) {
+static const char *parsePNGArgs(Local<Value> arg, PngWriteClosure *pngargs) {
   if (arg->IsObject()) {
     Local<Object> obj = Nan::To<Object>(arg).ToLocalChecked();
 
     Local<Value> cLevel = Nan::Get(obj, Nan::New("compressionLevel").ToLocalChecked()).ToLocalChecked();
-    if (cLevel->IsUint32()) {
-      uint32_t val = Nan::To<uint32_t>(cLevel).FromMaybe(0);
+    if (cLevel->IsInt32()) {
+      int32_t val = Nan::To<int32_t>(cLevel).FromMaybe(0);
       // See quote below from spec section 4.12.5.5.
       if (val <= 9) pngargs->compressionLevel = val;
     }
@@ -193,6 +206,8 @@ void Initialize(Nan::ADDON_REGISTER_FUNCTION_ARGS_TYPE target) {
   Nan::Set(target, Nan::New("PNG_FILTER_AVG").ToLocalChecked(), Nan::New<Uint32>(PNG_FILTER_AVG));
   Nan::Set(target, Nan::New("PNG_FILTER_PAETH").ToLocalChecked(), Nan::New<Uint32>(PNG_FILTER_PAETH));
   Nan::Set(target, Nan::New("PNG_ALL_FILTERS").ToLocalChecked(), Nan::New<Uint32>(PNG_ALL_FILTERS));
+
+  fpng::fpng_init();
 }
 
 NAN_MODULE_INIT(init) {
