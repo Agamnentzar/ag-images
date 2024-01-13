@@ -1,6 +1,7 @@
 #include <nan.h>
 #include <v8.h>
 #include "./png.h"
+#include "fpng.cpp"
 
 using namespace v8;
 using namespace std;

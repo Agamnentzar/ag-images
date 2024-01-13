@@ -12,7 +12,8 @@
                 "-Wextra",
                 "-O3",
                 "-fno-strict-aliasing",
-                "-DFPNG_NO_STDIO"
+                "-fvisibility=hidden",
+                "-DFPNG_NO_STDIO",
             ],
             "include_dirs": [
                 "<!(node -e \"require('nan')\")",
@@ -20,8 +21,7 @@
                 "./deps/zlib"
             ],
             "sources": [
-                "./src/main.cpp",
-                "./src/fpng.cpp"
+                "./src/main.cpp"
             ],
             'conditions': [
                 ['OS=="linux" and target_arch=="x64"', {
