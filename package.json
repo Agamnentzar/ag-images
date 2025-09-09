@@ -28,7 +28,7 @@
   "types": "index.d.ts",
   "dependencies": {
     "@types/node": "20.9.4",
-    "nan": "2.18.0",
+    "nan": "2.23.0",
     "node-pre-gyp": "^0.15.0"
   },
   "devDependencies": {
