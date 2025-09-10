@@ -3,3 +3,4 @@
 build
 node_modules
 test/*.out.png
+.v8-cache
