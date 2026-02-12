@@ -51,3 +51,6 @@ export interface DecodeOptions {
 
 export function encodePNG(width: number, height: number, data: Buffer, options?: PngConfig): Promise<Buffer>;
 export function decodePNG(data: Buffer, options?: DecodeOptions): Promise<DecodedImageData>;
+export function decodeWebP(data: Buffer, options?: DecodeOptions): Promise<DecodedImageData>;
+/** Auto-detects format (PNG or WebP) from magic bytes and decodes. */
+export function decode(data: Buffer, options?: DecodeOptions): Promise<DecodedImageData>;
