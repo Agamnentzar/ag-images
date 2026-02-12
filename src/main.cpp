@@ -57,6 +57,47 @@ class PngDecodeWorker : public Nan::AsyncWorker {
   PngReadClosure* closure;
 };
 
+class WebpDecodeWorker : public Nan::AsyncWorker {
+ public:
+  WebpDecodeWorker(Nan::Callback *callback, WebpReadClosure* closure)
+    : Nan::AsyncWorker(callback), closure(closure) {}
+
+  ~WebpDecodeWorker() {
+    closure->cb.Reset();
+    closure->dataRef.Reset();
+    delete closure;
+    delete callback;
+  }
+
+  // Executed inside the worker-thread.
+  void Execute() override {
+    closure->status = read_webp(closure);
+    if (closure->status != 0) {
+      SetErrorMessage("WebP decoding failed.");
+    }
+  }
+
+  // Executed when the async work is complete
+  void HandleOKCallback() override {
+    Nan::HandleScope scope;
+
+    Local<Object> buf = NewBuffer((char*)closure->buffer, closure->width * closure->height * 4, [] (char *data, void* hint) {
+      free(data);
+    }, nullptr).ToLocalChecked();
+    Local<Value> argv[4] = { Nan::Null(), buf, Nan::New<v8::Int32>(closure->width), Nan::New<v8::Int32>(closure->height) };
+    callback->Call(4, argv, async_resource);
+  }
+
+  void HandleErrorCallback() override {
+    Nan::HandleScope scope;
+    Local<Value> argv[1] = { Nan::Error(ErrorMessage()) };
+    callback->Call(1, argv, async_resource);
+  }
+
+ private:
+  WebpReadClosure* closure;
+};
+
 class PngEncodeWorker : public Nan::AsyncWorker {
  public:
   PngEncodeWorker(Nan::Callback *callback, PngWriteClosure* closure)
@@ -193,12 +234,27 @@ NAN_METHOD(decodePNG) {
   Nan::AsyncQueueWorker(new PngDecodeWorker(callback, closure));
 }
 
+NAN_METHOD(decodeWebP) {
+  if (!node::Buffer::HasInstance(info[0]) || !info[1]->IsBoolean() || !info[2]->IsFunction()) {
+    return Nan::ThrowTypeError("Invalid arguments");
+  }
+
+  auto closure = new WebpReadClosure();
+  closure->data = (uint8_t*)node::Buffer::Data(info[0]);
+  closure->length = (size_t)node::Buffer::Length(info[0]);
+  closure->dataRef.Reset(info[0]);
+  closure->premultiplied = info[1]->BooleanValue(info.GetIsolate());
+  Nan::Callback *callback = new Nan::Callback(info[2].As<Function>());
+  Nan::AsyncQueueWorker(new WebpDecodeWorker(callback, closure));
+}
+
 void Initialize(Nan::ADDON_REGISTER_FUNCTION_ARGS_TYPE target) {
   Nan::HandleScope scope;
   auto ctx = Nan::GetCurrentContext();
 
   Nan::Set(target, Nan::New("encodePNG").ToLocalChecked(), Nan::New<FunctionTemplate>(encodePNG)->GetFunction(ctx).ToLocalChecked());
   Nan::Set(target, Nan::New("decodePNG").ToLocalChecked(), Nan::New<FunctionTemplate>(decodePNG)->GetFunction(ctx).ToLocalChecked());
+  Nan::Set(target, Nan::New("decodeWebP").ToLocalChecked(), Nan::New<FunctionTemplate>(decodeWebP)->GetFunction(ctx).ToLocalChecked());
 
   Nan::Set(target, Nan::New("PNG_NO_FILTERS").ToLocalChecked(), Nan::New<Uint32>(PNG_NO_FILTERS));
   Nan::Set(target, Nan::New("PNG_FILTER_NONE").ToLocalChecked(), Nan::New<Uint32>(PNG_FILTER_NONE));

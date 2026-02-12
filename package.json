@@ -1,7 +1,7 @@
 {
   "name": "ag-images",
   "description": "Library for loading and saving PNG files",
-  "version": "2.3.3",
+  "version": "2.4.0",
   "main": "index.js",
   "browser": "browser.js",
   "keywords": [],
@@ -28,7 +28,7 @@
   "types": "index.d.ts",
   "dependencies": {
     "@types/node": "20.9.4",
-    "nan": "2.23.0",
+    "nan": "^2.25.0",
     "node-pre-gyp": "^0.15.0"
   },
   "devDependencies": {

@@ -34,10 +34,12 @@
 #define WUFFS_CONFIG__MODULE__NETPBM
 #define WUFFS_CONFIG__MODULE__NIE
 #define WUFFS_CONFIG__MODULE__PNG
-#define WUFFS_CONFIG__MODULE__TGA
+#define WUFFS_CONFIG__MODULE__TARGA
+#define WUFFS_CONFIG__MODULE__VP8
 #define WUFFS_CONFIG__MODULE__WBMP
+#define WUFFS_CONFIG__MODULE__WEBP
 #define WUFFS_CONFIG__MODULE__ZLIB
-#include "wuffs-v0.4.c"
+#include "wuffs-unsupported-snapshot.c"
 
 enum error_status {
   ES_SUCCESS = 0,
@@ -289,6 +291,56 @@ static error_status read_png(PngReadClosure *closure) {
              WUFFS_BASE__PIXEL_FORMAT__RGBA_PREMUL) {
     return ES_FAILED;
   }  else if (!closure->premultiplied && res.pixbuf.pixcfg.pixel_format().repr !=
+             WUFFS_BASE__PIXEL_FORMAT__RGBA_NONPREMUL) {
+    return ES_FAILED;
+  }
+
+  uint32_t w = res.pixbuf.pixcfg.width();
+  uint32_t h = res.pixbuf.pixcfg.height();
+  closure->width = w;
+  closure->height = h;
+
+  // WARNING: this malloc needs to be free'd by the caller
+  closure->buffer = (uint8_t*)res.pixbuf_mem_owner.release();
+
+  return ES_SUCCESS;
+}
+
+// webp reading
+
+struct WebpReadClosure {
+  // input
+  uint8_t *data;
+  size_t length;
+  Nan::Persistent<v8::Value> dataRef;
+  Nan::Callback cb;
+  error_status status = ES_SUCCESS;
+  bool premultiplied;
+
+  // output
+  uint32_t width = 0;
+  uint32_t height = 0;
+  uint8_t *buffer = nullptr;
+};
+
+static bool is_webp(uint8_t* data, size_t len) {
+  return len >= 12 &&
+         data[0]=='R' && data[1]=='I' && data[2]=='F' && data[3]=='F' &&
+         data[8]=='W' && data[9]=='E' && data[10]=='B' && data[11]=='P';
+}
+
+static error_status read_webp(WebpReadClosure *closure) {
+  if (!is_webp(closure->data, closure->length)) return ES_INVALID_SIGNATURE;
+
+  MyDecodeCallbacks callbacks(closure->premultiplied);
+  wuffs_aux::sync_io::MemoryInput input(closure->data, closure->length);
+  wuffs_aux::DecodeImageResult res = wuffs_aux::DecodeImage(callbacks, input);
+  if (!res.error_message.empty()) {
+    return ES_FAILED;
+  } else if (closure->premultiplied && res.pixbuf.pixcfg.pixel_format().repr !=
+             WUFFS_BASE__PIXEL_FORMAT__RGBA_PREMUL) {
+    return ES_FAILED;
+  } else if (!closure->premultiplied && res.pixbuf.pixcfg.pixel_format().repr !=
              WUFFS_BASE__PIXEL_FORMAT__RGBA_NONPREMUL) {
     return ES_FAILED;
   }
